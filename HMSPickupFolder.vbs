@@ -2,9 +2,14 @@ const PICKUPFOLDER = "C:\Program Files (x86)\hMailServer\Pickup"
 const INTERVAL = 1
 const TIMEOUT = 10000
 const WMI_TIMEOUT = -2147209215
+Const EVENTLOG_ERROR = 1
+Const EVENTLOG_WARNING = 2
+Const EVENTLOG_INFORMATION = 4
+Set oShell = WScript.CreateObject("WScript.Shell")
 set oWMI = GetObject("winmgmts://./root/cimv2")
 set oFS = CreateObject("Scripting.FileSystemObject")
 set oMonitoredFolder = CreateMonitoredFolder(PICKUPFOLDER)
+oShell.LogEvent EVENTLOG_INFORMATION, "hMailServer Pickup Service: Service started"
 do
 	on error resume next
 	set oFolderEvent = oMonitoredFolder.NextEvent(TIMEOUT)
@@ -36,7 +41,7 @@ End Function
 sub DispatchFolderChangeEvent(oInstance)
 	set oFolder = oFS.GetFolder(PICKUPFOLDER)
 	for each oFile in oFolder.Files
-		wscript.echo FormatDateTime(Now, vbGeneralDate) & "  Processing file " & oFile.name
+		oShell.LogEvent EVENTLOG_INFORMATION, "hMailServer Pickup Service: Processing file " & oFile.name
 		PickupOutgoingMailFile(oFile)
 	next
 end sub
@@ -49,20 +54,22 @@ sub PickupOutgoingMailFile(oFile)
 	sOriginalTo = oMailMessage.HeaderValue("To")
 	sOriginalCC = oMailMessage.HeaderValue("CC")
 	oMailMessage.ClearRecipients
-	wscript.echo FormatDateTime(Now, vbGeneralDate) & "  Setting MAIL FROM: to " & CleanAddress(oMailMessage.HeaderValue("From"))
+	sEventMessage = "hMailServer Pickup Service: File details for " & oFile.name
+	sEventMessage = sEventMessage & vbCRLF & "  Setting MAIL FROM: to " & CleanAddress(oMailMessage.HeaderValue("From"))
 	oMailMessage.FromAddress = CleanAddress(oMailMessage.HeaderValue("From"))
-	for each sRecipient in SplitBetween(sOriginalTo, "<", ">") 
-		wscript.echo FormatDateTime(Now, vbGeneralDate) & "  Adding To: recipient " & sRecipient
+	for each sRecipient in SplitBetween(sOriginalTo, "<", ">")
+		sEventMessage = sEventMessage & vbCRLF & "  Adding To: recipient " & sRecipient
 		oMailMessage.AddRecipient "", CleanAddress(sRecipient)
 	next
 	for each sRecipient in SplitBetween(sOriginalCC, "<", ">") 
-		wscript.echo FormatDateTime(Now, vbGeneralDate) & "  Adding CC: recipient " & sRecipient		
+		sEventMessage = sEventMessage & vbCRLF & "  Adding CC: recipient " & sRecipient		
 		oMailMessage.AddRecipient "", CleanAddress(sRecipient)
 	next
 	oMailMessage.HeaderValue("To") = sOriginalTo
 	oMailMessage.HeaderValue("CC") = sOriginalCC
-	wscript.echo FormatDateTime(Now, vbGeneralDate) & "  File sent."
 	oMailMessage.Save
+	sEventMessage = sEventMessage & vbCRLF & "  File sent."
+	oShell.LogEvent EVENTLOG_INFORMATION, sEventMessage
 	oFS.DeleteFile oFile.path, true
 	on error goto 0
 end sub
